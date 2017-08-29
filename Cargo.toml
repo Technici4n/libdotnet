@@ -1,0 +1,8 @@
+[package]
+authors = ["Taryn Hill <taryn@phrohdoh.com>"]
+name = "libdotnet"
+version = "0.1.0"
+
+[dependencies]
+libc = "0.2.29"
+libloading = "0.4.0"
