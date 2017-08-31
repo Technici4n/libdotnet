@@ -3,6 +3,9 @@ use std::ffi::{CString, NulError};
 use libc::{c_char, c_int};
 use lib;
 
+// TODO: This prevents libdotnet from compiling on Windows.
+use std::os::unix::ffi::OsStringExt;
+
 pub type RtResult<T> = Result<T, RtError>;
 
 #[derive(Debug)]
@@ -34,6 +37,10 @@ mod raw {
         __variant2,
     }
 }
+
+#[allow(non_camel_case_types)]
+type t_mono_main = fn(c_int, *const *const c_char) -> c_int;
+type SymMain<'sym> = lib::Symbol<'sym, t_mono_main>;
 
 #[allow(non_camel_case_types)]
 type t_mono_set_dirs = fn(*const c_char, *const c_char);
@@ -71,6 +78,52 @@ pub enum InitError {
     __NonExhaustive,
 }
 
+#[derive(Debug)]
+pub enum ShelledRuntimeError {
+    FailedToLoadLibMono,
+    FailedToFindMonoMainSymbol,
+    ArgumentContainsNulByte(usize),
+    PathContainsNulByte(usize),
+    NonZeroExitCode(usize),
+
+    #[doc(hidden)]
+    __NonExhaustive,
+}
+
+pub struct ShelledRuntime;
+
+impl ShelledRuntime {
+    pub fn run<P1, P2, T>(libmono_dylib_path: P1, assembly_path: P2, args: T) -> Result<(), ShelledRuntimeError>
+        where P1: Into<PathBuf>,
+              P2: Into<PathBuf>,
+               T: IntoIterator,
+               T::Item: AsRef<str> {
+        let libmono_dylib_path = libmono_dylib_path.into();
+        let assembly_path = assembly_path.into();
+
+        let lib_mono = lib::Library::new(&libmono_dylib_path).map_err(|_| ShelledRuntimeError::FailedToLoadLibMono)?;
+        let sym_main: SymMain = unsafe { lib_mono.get(b"mono_main") }.map_err(|_| ShelledRuntimeError::FailedToFindMonoMainSymbol)?;
+
+        let os_libmono_path = libmono_dylib_path.into_os_string().into_vec();
+        let c_invocation_path = CString::new(os_libmono_path).map_err(|e| ShelledRuntimeError::PathContainsNulByte(e.nul_position()))?;
+
+        let os_assembly_path = assembly_path.into_os_string().into_vec();
+        let c_asm_path = CString::new(os_assembly_path).map_err(|e| ShelledRuntimeError::PathContainsNulByte(e.nul_position()))?;
+
+        let c_args = args.into_iter().map(|arg| CString::new(arg.as_ref()).map_err(|e| ShelledRuntimeError::ArgumentContainsNulByte(e.nul_position()))).collect::<Result<Vec<_>, _>>()?;
+        let mut args = vec![&c_invocation_path, &c_asm_path];
+        args.extend(c_args.iter());
+
+        let raw_args = args.iter().map(|arg| arg.as_ptr()).collect::<Vec<_>>();
+
+        match sym_main(raw_args.len() as c_int, raw_args.as_ptr()) as usize {
+            0 => Ok(()),
+            anything_else @ _ => Err(ShelledRuntimeError::NonZeroExitCode(anything_else)),
+        }
+    }
+}
+
+/// An instance of the Mono runtime.
 pub struct Runtime<'rt> {
     pub etc_path: PathBuf,
     pub lib_path: PathBuf,
