@@ -21,12 +21,16 @@ impl From<NulError> for RtError {
 mod raw {
     #[repr(u8)]
     pub enum MonoDomain {
+        #[allow(non_camel_case_types)]
         __variant1,
+        #[allow(non_camel_case_types)]
         __variant2,
     }
     #[repr(u8)]
     pub enum MonoAssembly {
+        #[allow(non_camel_case_types)]
         __variant1,
+        #[allow(non_camel_case_types)]
         __variant2,
     }
 }
