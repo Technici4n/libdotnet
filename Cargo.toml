@@ -1,6 +1,6 @@
 [package]
-authors = ["Taryn Hill <taryn@phrohdoh.com>"]
-name = "libdotnet"
+authors = ["Taryn Hill <taryn@phrohdoh.com>", "Bruno Ploumhans"]
+name = "libmono"
 version = "0.1.0"
 
 [dependencies]
